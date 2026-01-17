@@ -291,6 +291,65 @@ When eraser mode activated:
 // Collaborative: Eraser strokes sync like regular strokes
 ```
 
+### In-Memory Synchronization (No Database)
+
+**How Real-time Sync Works Without Storage:**
+
+The application uses **in-memory storage** on the WebSocket server:
+
+```typescript
+// Server maintains everything in RAM
+Room {
+  users: Map<userId, User>       // Connected users
+  strokes: Map<strokeId, Stroke> // ALL drawings (in RAM!)
+}
+```
+
+**Sync Mechanism:**
+
+1. **User Joins**
+   - Connects to WebSocket server
+   - Server sends complete drawing history from memory
+   - New user sees all existing strokes
+
+2. **Someone Draws**
+   - Drawing data sent to server
+   - Server stores in RAM
+   - Broadcasts to all connected clients
+   - Everyone's canvas updates instantly
+
+3. **Why It Works**
+   - Server is single source of truth
+   - All clients sync with server state
+   - Real-time updates via WebSocket
+   - No database queries needed
+
+**Trade-offs:**
+
+✅ **Advantages:**
+- Ultra-fast real-time collaboration
+- No database overhead
+- Simple architecture
+- Perfect for live drawing sessions
+
+⚠️ **Limitations:**
+- Drawings lost on server restart
+- No permanent storage
+- Free tier servers may sleep (lose data)
+- Best for temporary/session-based collaboration
+
+**Use Cases:**
+- Live collaborative brainstorming
+- Real-time team sketching
+- Temporary drawing sessions
+- Quick idea sharing
+
+**To Add Persistence:**
+If you need permanent storage, you can add:
+- MongoDB/PostgreSQL for stroke history
+- File-based storage (JSON)
+- Redis for session persistence
+
 ---
 
 ## 📱 Mobile Support
