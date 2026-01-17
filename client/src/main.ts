@@ -2,7 +2,7 @@ import { CanvasManager } from './canvas';
 import { WebSocketClient } from './socket';
 
 // Initialize
-const socket = new WebSocketClient('ws://localhost:3000');
+const socket = new WebSocketClient('wss://collaborative-canvas-server-qvhy.onrender.com');
 const staticCanvas = document.getElementById('staticCanvas') as HTMLCanvasElement;
 const activeCanvas = document.getElementById('activeCanvas') as HTMLCanvasElement;
 
