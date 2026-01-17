@@ -24,15 +24,27 @@ vercel
 
 ### Recommended: Render.com (Free Tier Available)
 
+**Option 1: Using render.yaml (Automatic)**
+
+The repository includes a `render.yaml` file that auto-configures everything:
+
+1. Go to [render.com](https://render.com) and sign in
+2. Click "New +" → "Blueprint"
+3. Connect your GitHub repository
+4. Render will read `render.yaml` and configure automatically
+5. Click "Apply" and wait for deployment
+
+**Option 2: Manual Setup**
+
 1. Go to [render.com](https://render.com) and sign in
 2. Click "New +" → "Web Service"
 3. Connect your GitHub repository
 4. Configure the service:
-   - **Name:** `collaborative-canvas-server` (or your choice)
-   - **Root Directory:** `server`
+   - **Name:** `collaborative-canvas-server`
+   - **Root Directory:** Leave empty (we'll use full path in commands)
    - **Environment:** `Node`
-   - **Build Command:** `npm install && npm run build`
-   - **Start Command:** `npm start`
+   - **Build Command:** `cd server && npm install && npm run build`
+   - **Start Command:** `cd server && npm start`
    - **Instance Type:** Free
 5. Click "Create Web Service"
 6. Wait for deployment (2-3 minutes)
