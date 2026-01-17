@@ -24,14 +24,19 @@ vercel
 
 ### Recommended: Render.com (Free Tier Available)
 
-1. Go to [render.com](https://render.com)
-2. Create a new "Web Service"
+1. Go to [render.com](https://render.com) and sign in
+2. Click "New +" → "Web Service"
 3. Connect your GitHub repository
-4. Configure:
+4. Configure the service:
+   - **Name:** `collaborative-canvas-server` (or your choice)
    - **Root Directory:** `server`
+   - **Environment:** `Node`
    - **Build Command:** `npm install && npm run build`
    - **Start Command:** `npm start`
-   - **Environment:** Node
+   - **Instance Type:** Free
+5. Click "Create Web Service"
+6. Wait for deployment (2-3 minutes)
+7. Copy your deployment URL (e.g., `https://your-app.onrender.com`)
 
 ### Alternative: Railway.app
 

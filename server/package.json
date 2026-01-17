@@ -4,7 +4,7 @@
   "description": "WebSocket server for Collaborative Canvas",
   "main": "dist/server.js",
   "scripts": {
-    "start": "tsc && node dist/server.js",
+    "start": "node dist/server.js",
     "dev": "nodemon src/server.ts",
     "build": "tsc"
   },
