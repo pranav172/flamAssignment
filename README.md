@@ -126,6 +126,173 @@ collaborative-canvas/
 - **ws** - WebSocket library
 - **TypeScript** - Type-safe server code
 
+---
+
+## 🔌 How It Works
+
+### Architecture Overview
+
+```
+┌─────────────┐         WebSocket          ┌─────────────┐
+│   Client A  │ ←────────────────────────→ │             │
+├─────────────┤                             │   Server    │
+│   Client B  │ ←────────────────────────→ │  (Room      │
+├─────────────┤                             │   Manager)  │
+│   Client C  │ ←────────────────────────→ │             │
+└─────────────┘                             └─────────────┘
+```
+
+### Real-time Synchronization
+
+**1. Connection Flow**
+- Client connects to WebSocket server
+- Server assigns unique user ID and random color
+- Client receives full drawing history and list of connected users
+- User joins the shared drawing room
+
+**2. Drawing Events**
+
+When a user draws, the following happens:
+
+```
+Client Side:
+1. User touches/clicks canvas → Capture coordinates
+2. Create stroke locally (optimistic update)
+3. Send event to server via WebSocket
+4. Render stroke immediately on local canvas
+
+Server Side:
+1. Receive drawing event from client
+2. Add to room's stroke history
+3. Broadcast to all other connected clients
+4. Each client updates their canvas
+
+Other Clients:
+1. Receive broadcasted event
+2. Update their stroke map
+3. Render the new stroke on their canvas
+```
+
+### WebSocket Events
+
+#### Client → Server
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `draw_start` | `{id, x, y, color, width}` | Start a new stroke |
+| `draw_point` | `{strokeId, x, y}` | Add point to active stroke |
+| `draw_end` | `{strokeId}` | Finish the stroke |
+| `cursor` | `{x, y}` | Update cursor position |
+| `undo` | `{}` | Remove last stroke |
+| `clear` | `{}` | Clear entire canvas |
+
+#### Server → Client
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `welcome` | `{userId, color, history, users}` | Initial connection data |
+| `user_joined` | `{id, name, color}` | New user connected |
+| `user_left` | `{userId}` | User disconnected |
+| `draw_start` | `{id, userId, color, width, points}` | Someone started drawing |
+| `draw_point` | `{strokeId, x, y}` | New point in stroke |
+| `draw_end` | `{strokeId}` | Stroke completed |
+| `cursor` | `{userId, x, y}` | Cursor position update |
+| `undo` | `{strokeId}` | Stroke removed |
+| `clear` | `{}` | Canvas cleared |
+
+### Backend Implementation
+
+**Server Structure:**
+```typescript
+// Room-based architecture
+Room {
+  users: Map<userId, User>
+  strokes: Map<strokeId, Stroke>
+  
+  addUser(user)
+  removeUser(userId)
+  addStroke(stroke)
+  removeStroke(strokeId)
+  broadcast(event, data)
+}
+
+// Each stroke contains:
+Stroke {
+  id: string           // Unique identifier
+  userId: string       // Who drew it
+  color: string        // Drawing color
+  width: number        // Brush width
+  points: Point[]      // Array of {x, y} coordinates
+  isFinished: boolean  // Completion status
+}
+```
+
+**Synchronization Strategy:**
+
+1. **Optimistic Updates**
+   - Client renders strokes immediately
+   - No waiting for server confirmation
+   - Provides instant feedback
+
+2. **State Consistency**
+   - Server is source of truth
+   - All drawing history stored on server
+   - New users get full history on join
+
+3. **Broadcast Mechanism**
+   - Server receives event from one client
+   - Validates and stores in room state
+   - Broadcasts to all OTHER clients (excludes sender)
+   - Prevents duplicate rendering
+
+4. **Cursor Throttling**
+   - Cursor updates throttled to 50ms
+   - Reduces network overhead
+   - Still feels real-time to users
+
+### Canvas Rendering
+
+**Two-layer approach:**
+
+```typescript
+Static Canvas:  // Finished strokes (bottom layer)
+Active Canvas:  // In-progress strokes + cursors (top layer)
+```
+
+**Why two layers?**
+- Performance: Only redraw active elements during drawing
+- Efficiency: Finished strokes baked into static layer once
+- Smooth: No flickering during active drawing
+
+### Touch Optimization
+
+```typescript
+Touch Events:
+1. touchstart → Begin drawing (no preventDefault to allow scroll detection)
+2. touchmove  → Continue drawing (preventDefault ONLY while drawing)
+3. touchend   → Finish stroke
+
+Smart Behavior:
+- Tap and drag = Draw
+- Swipe = Scroll (when not drawing)
+- While drawing = Prevent scroll
+```
+
+### Eraser Implementation
+
+```typescript
+// Eraser is actually white pen
+When eraser mode activated:
+1. Save current color
+2. Switch to white (#FFFFFF)
+3. Draw normally (appears to erase on white background)
+4. On exit: Restore original color
+
+// Collaborative: Eraser strokes sync like regular strokes
+```
+
+---
+
 ## 📱 Mobile Support
 
 The application is fully responsive and optimized for mobile devices:
