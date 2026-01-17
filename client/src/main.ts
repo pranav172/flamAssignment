@@ -57,11 +57,7 @@ socket.onMessage((type, payload) => {
             colorPicker.value = payload.color; // Sync UI
             canvasManager.setHistory(payload.history);
             canvasManager.setUsers(payload.users);
-            userCount.innerText = String(payload.users.length + 1); // +1 myself? usually provided list includes me if I joined? let's see.
-            // My server implementation: 'welcome' contains users excluding me? or all?
-            // Room.addUser called BEFORE sending welcome in server.ts?
-            // Yes: room.addUser(user); ws.send(...)
-            // So I am in the list.
+            // Server sends users array which already includes current user
             userCount.innerText = String(payload.users.length);
             break;
             

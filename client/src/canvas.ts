@@ -43,9 +43,15 @@ export class CanvasManager {
     // Remote users map for color/name lookup
     private users: Map<string, {name: string, color: string}> = new Map();
 
-    // Virtual canvas dimensions - SCROLLABLE CANVAS
-    private readonly VIRTUAL_WIDTH = 5000;
-    private readonly VIRTUAL_HEIGHT = 5000;
+    // Virtual canvas dimensions - SCROLLABLE CANVAS (Reduced for better performance)
+    private readonly VIRTUAL_WIDTH = 3000;
+    private readonly VIRTUAL_HEIGHT = 3000;
+    
+    // Performance optimization flags
+    private isDirty = false; // Track if active canvas needs redraw
+    private lastPointBatchTime = 0;
+    private pointBatchBuffer: Array<{strokeId: string, x: number, y: number}> = [];
+    private readonly POINT_BATCH_INTERVAL = 16; // ~60fps max for point updates
 
     constructor(staticCanvas: HTMLCanvasElement, activeCanvas: HTMLCanvasElement, socket: WebSocketClient) {
         this.staticCanvas = staticCanvas;
@@ -91,7 +97,8 @@ export class CanvasManager {
 
     private initializeCanvas() {
         // Set canvas to virtual dimensions for scrolling
-        const dpr = window.devicePixelRatio || 1;
+        // Cap DPI at 2x for better performance on high-DPI displays
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
         
         [this.staticCanvas, this.activeCanvas].forEach(canvas => {
             canvas.width = this.VIRTUAL_WIDTH * dpr;
@@ -138,12 +145,14 @@ export class CanvasManager {
             isFinished: false
         };
         this.strokes.set(stroke.id, stroke);
+        this.isDirty = true;
     }
 
     public handleDrawPoint(payload: any) {
         const stroke = this.strokes.get(payload.strokeId);
         if (stroke) {
             stroke.points.push({ x: payload.x, y: payload.y });
+            this.isDirty = true;
         }
     }
 
@@ -172,6 +181,7 @@ export class CanvasManager {
                 color: user.color,
                 lastUpdate: Date.now()
             });
+            this.isDirty = true;
         }
     }
 
@@ -253,10 +263,19 @@ export class CanvasManager {
                 const stroke = this.strokes.get(this.currentStrokeId);
                 if(stroke) {
                     stroke.points.push({x, y});
-                    this.socket.send('draw_point', {
+                    this.isDirty = true; // Mark for redraw
+                    
+                    // Batch point updates to reduce WebSocket traffic
+                    this.pointBatchBuffer.push({
                         strokeId: this.currentStrokeId,
                         x, y
                     });
+                    
+                    // Send batch if enough time has passed
+                    if (now - this.lastPointBatchTime > this.POINT_BATCH_INTERVAL) {
+                        this.flushPointBatch();
+                        this.lastPointBatchTime = now;
+                    }
                 }
             }
         };
@@ -264,6 +283,10 @@ export class CanvasManager {
         const end = () => {
             if (this.isDrawing && this.currentStrokeId) {
                 this.isDrawing = false;
+                
+                // Flush any remaining batched points
+                this.flushPointBatch();
+                
                 const stroke = this.strokes.get(this.currentStrokeId);
                 if (stroke) {
                     stroke.isFinished = true;
@@ -273,6 +296,7 @@ export class CanvasManager {
                     });
                 }
                 this.currentStrokeId = null;
+                this.isDirty = true;
             }
         };
         
@@ -290,32 +314,62 @@ export class CanvasManager {
         this.activeCanvas.addEventListener('touchend', end);
     }
     
+    private flushPointBatch() {
+        if (this.pointBatchBuffer.length > 0) {
+            // Send all batched points in a single message
+            this.pointBatchBuffer.forEach(point => {
+                this.socket.send('draw_point', point);
+            });
+            this.pointBatchBuffer = [];
+        }
+    }
+    
 
     private startAnimationLoop() {
         const render = () => {
-            // Clear Active Canvas
-            this.activeCtx.clearRect(0, 0, this.activeCanvas.width, this.activeCanvas.height);
+            // Only redraw if something changed (dirty flag optimization)
+            if (this.isDirty || this.hasActiveCursors() || this.hasActiveStrokes()) {
+                // Clear Active Canvas
+                this.activeCtx.clearRect(0, 0, this.activeCanvas.width, this.activeCanvas.height);
 
-            // Draw all unfinished strokes (Active Strokes)
-            this.strokes.forEach(stroke => {
-                // Skip strokes with only 1 point to avoid showing initial dot
-                if (!stroke.isFinished && stroke.points.length >= 2) {
-                    this.drawStroke(this.activeCtx, stroke);
-                }
-            });
+                // Draw all unfinished strokes (Active Strokes)
+                this.strokes.forEach(stroke => {
+                    // Skip strokes with only 1 point to avoid showing initial dot
+                    if (!stroke.isFinished && stroke.points.length >= 2) {
+                        this.drawStroke(this.activeCtx, stroke);
+                    }
+                });
 
-            // Draw Cursors
-            this.cursors.forEach((cursor) => {
-                if (Date.now() - cursor.lastUpdate > 5000) return; // Hide old cursors
-                this.activeCtx.beginPath();
-                this.activeCtx.arc(cursor.x, cursor.y, 5, 0, Math.PI * 2);
-                this.activeCtx.fillStyle = cursor.color;
-                this.activeCtx.fill();
-            });
+                // Draw Cursors
+                this.cursors.forEach((cursor) => {
+                    if (Date.now() - cursor.lastUpdate > 5000) return; // Hide old cursors
+                    this.activeCtx.beginPath();
+                    this.activeCtx.arc(cursor.x, cursor.y, 5, 0, Math.PI * 2);
+                    this.activeCtx.fillStyle = cursor.color;
+                    this.activeCtx.fill();
+                });
+                
+                this.isDirty = false;
+            }
 
             requestAnimationFrame(render);
         };
         render();
+    }
+    
+    private hasActiveStrokes(): boolean {
+        for (const stroke of this.strokes.values()) {
+            if (!stroke.isFinished) return true;
+        }
+        return false;
+    }
+    
+    private hasActiveCursors(): boolean {
+        const now = Date.now();
+        for (const cursor of this.cursors.values()) {
+            if (now - cursor.lastUpdate <= 5000) return true;
+        }
+        return false;
     }
 
     private redrawStatic() {
